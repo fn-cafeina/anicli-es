@@ -27,9 +27,8 @@ Asegurate de que donde se instale el binario, usualmente `$HOME/.cargo/bin` sea 
 ## Dependencias
 
 * mpv
-* yt-dlp
 
-yt-dlp extrae la URL del video desde el servidor embebido; mpv lo reproduce. Por ahora solo se soporta el servidor **mp4upload**.
+anicli-es extrae la URL del video desde el servidor embebido con código propio; mpv lo reproduce. Por ahora solo se soporta el servidor **mp4upload**.
 
 ## Notas
 

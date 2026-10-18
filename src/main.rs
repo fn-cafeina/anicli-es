@@ -4,6 +4,7 @@ use dialoguer::Input;
 use getopts::Options;
 use std::{env, process};
 
+mod extractor;
 mod http;
 mod player;
 mod provider;

@@ -1,9 +1,10 @@
+use crate::extractor;
 use crate::provider::{self, Anime};
 use crate::ui;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use std::process::Command;
 
-// Elige servidor, extrae el video con yt-dlp y lo reproduce en mpv
+// Elige servidor, extrae el video y lo reproduce en mpv
 pub fn play(anime: &Anime, episodes: &[String], index: usize) -> Result<ui::Action> {
     println!(
         "{esc}[2J{esc}[1;1HObteniendo información del video.\n",
@@ -34,15 +35,15 @@ pub fn play(anime: &Anime, episodes: &[String], index: usize) -> Result<ui::Acti
     let server = &servers[ui::choose_server(&servers)?];
 
     println!("Extrayendo video desde \"{}\"...\n", server.name);
-    let url = match extract_direct_url(&server.url) {
-        Ok(url) => url,
+    let extracted = match extractor::extract(server) {
+        Ok(extracted) => extracted,
         Err(error) => {
             println!("No se pudo extraer el video: {error:#}");
             return pick_another_episode(episodes);
         }
     };
 
-    if let Err(error) = launch_mpv(&url, &referer_of(&server.url)) {
+    if let Err(error) = launch_mpv(&extracted.url, &extracted.referer) {
         println!("{error:#}");
         return pick_another_episode(episodes);
     }
@@ -76,53 +77,6 @@ fn supported_servers(servers: Vec<provider::Server>) -> Vec<provider::Server> {
         .into_iter()
         .filter(|server| provider::SUPPORTED_SERVERS.contains(&server.name.as_str()))
         .collect()
-}
-
-// Pide a yt-dlp la URL directa del stream del servidor embebido
-fn extract_direct_url(embed_url: &str) -> Result<String> {
-    let output = Command::new("yt-dlp")
-        .args(["-g", "--no-warnings", embed_url])
-        .output()
-        .context("no se pudo ejecutar yt-dlp (¿está instalado?)")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let reason = stderr.lines().last().unwrap_or("").trim().to_string();
-        bail!("yt-dlp no pudo extraer el video: {reason}");
-    }
-
-    let url = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_string();
-
-    if !is_stream_url(&url, embed_url) {
-        bail!("el servidor devolvió su página en vez del video (link caído); prueba otro episodio");
-    }
-
-    Ok(url)
-}
-
-// yt-dlp "extrae" la misma página del embed cuando el link está muerto; mpv
-// no puede reproducir eso, así que se rechaza antes de lanzarlo
-fn is_stream_url(extracted: &str, embed_url: &str) -> bool {
-    let extracted = extracted.trim().trim_end_matches('/');
-    let embed_url = embed_url.trim().trim_end_matches('/');
-
-    !extracted.is_empty() && !extracted.eq_ignore_ascii_case(embed_url)
-}
-
-// Los servidores exigen que el stream se pida desde su propio dominio:
-// https://www.mp4upload.com/embed-abc.html -> https://www.mp4upload.com
-fn referer_of(embed_url: &str) -> String {
-    let Some(scheme_end) = embed_url.find("://") else {
-        return String::new();
-    };
-    let after_scheme = &embed_url[scheme_end + 3..];
-    let host_end = after_scheme.find('/').unwrap_or(after_scheme.len());
-    embed_url[..scheme_end + 3 + host_end].to_string()
 }
 
 // mpv reproduce la URL directa; setsid lo deja en segundo plano para que la
@@ -175,21 +129,6 @@ mod tests {
     }
 
     #[test]
-    fn referer_extrae_origen_del_embed() {
-        assert_eq!(
-            referer_of("https://www.mp4upload.com/embed-abc.html"),
-            "https://www.mp4upload.com"
-        );
-        assert_eq!(referer_of("http://ok.ru/videoembed/123"), "http://ok.ru");
-        assert_eq!(referer_of("https://host"), "https://host");
-    }
-
-    #[test]
-    fn referer_vacio_sin_esquema() {
-        assert_eq!(referer_of("no-es-una-url"), "");
-    }
-
-    #[test]
     fn filtro_deja_solo_servidores_soportados() {
         let servers = vec![server("voe"), server("mp4upload"), server("mixdrop")];
 
@@ -204,30 +143,5 @@ mod tests {
         let servers = vec![server("voe")];
 
         assert!(supported_servers(servers).is_empty());
-    }
-
-    #[test]
-    fn extraccion_igual_al_embed_no_es_stream() {
-        let embed = "https://www.mp4upload.com/embed-abc.html";
-
-        assert!(!is_stream_url(embed, embed));
-        assert!(!is_stream_url(
-            "https://www.mp4upload.com/embed-abc.html/",
-            embed
-        ));
-        assert!(!is_stream_url(
-            "HTTPS://WWW.MP4UPLOAD.COM/EMBED-ABC.HTML",
-            embed
-        ));
-        assert!(!is_stream_url("", embed));
-        assert!(!is_stream_url("   ", embed));
-    }
-
-    #[test]
-    fn url_distinta_al_embed_es_stream() {
-        assert!(is_stream_url(
-            "https://a4.mp4upload.com:183/d/xyz/video.mp4",
-            "https://www.mp4upload.com/embed-abc.html"
-        ));
     }
 }
