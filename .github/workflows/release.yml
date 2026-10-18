@@ -1,0 +1,97 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formato
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Fixtures
+        run: bash scripts/fetch_fixtures.sh
+
+      - name: Tests
+        run: cargo test
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Leer versión
+        id: ver
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Compilar
+        run: cargo build --release --locked
+
+      - name: Empaquetar
+        run: tar -czf "anicli-es-v${{ steps.ver.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz" -C target/release anicli-es
+
+      - name: Subir artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anicli-es-linux
+          path: anicli-es-v${{ steps.ver.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz
+          retention-days: 30
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generar información del build
+        id: build-info
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          git log --pretty=format:"- %s" -n 10 > changelog.md
+
+      - name: Descargar artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: anicli-es-linux
+
+      - name: Crear release (draft)
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          name: "v${{ steps.build-info.outputs.version }}"
+          tag_name: "v${{ steps.build-info.outputs.version }}"
+          files: anicli-es-v${{ steps.build-info.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz
+          body_path: changelog.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
