@@ -1,16 +1,20 @@
 [package]
 name = "anicli-es"
-version = "0.3.31"
+version = "0.4.0"
 edition = "2021"
 readme = "./README.md"
-repository = "https://github.com/nolbap/anicli-es"
-homepage = "https://github.com/nolbap/anicli-es"
+repository = "https://github.com/fn-cafeina/anicli-es"
+homepage = "https://github.com/fn-cafeina/anicli-es"
 license-file = "./LICENSE"
 description = "Herramienta para ver animé, subtitulado al español, en la línea de comandos."
 
 [dependencies]
-base64 = "0.13.0"
-dialoguer = "0.10.2"
+anyhow = "1.0.104"
+base64 = "0.22"
+dialoguer = "0.12"
 getopts = "0.2"
-regex = "1.5"
+scraper = "0.27.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 ureq = "2.4.0"
+urlencoding = "2.1.3"
