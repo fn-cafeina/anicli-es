@@ -159,3 +159,96 @@ fn normalize_text(el: &scraper::ElementRef) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BASE: &str = "https://monoschinos.st";
+
+    #[test]
+    fn busqueda_extrae_titulos_info_y_links() {
+        let animes = parse_search(&crate::provider::fixture("buscar_naruto.html"), BASE).unwrap();
+
+        assert!(animes.len() >= 10);
+        assert!(animes.iter().any(|anime| anime.title == "Naruto"));
+        assert!(animes.iter().all(|anime| anime.url.starts_with("https://")));
+        assert!(animes.iter().all(|anime| !anime.info.is_empty()));
+    }
+
+    #[test]
+    fn busqueda_sin_resultados_devuelve_vacio() {
+        let animes = parse_search(&crate::provider::fixture("buscar_vacio.html"), BASE).unwrap();
+        assert!(animes.is_empty());
+    }
+
+    #[test]
+    fn pagina_de_anime_entrega_ajax_y_base_de_ver() {
+        let (ajax_url, ver_base) =
+            parse_anime_page(&crate::provider::fixture("anime_naruto.html")).unwrap();
+
+        assert_eq!(ajax_url, "https://monoschinos.st/ajax/ajax_pagination/278");
+        assert_eq!(ver_base, "https://monoschinos.st/ver/naruto-episodio-");
+    }
+
+    #[test]
+    fn pagina_de_pelicula_tambien_entrega_ajax_y_base_de_ver() {
+        let (ajax_url, ver_base) =
+            parse_anime_page(&crate::provider::fixture("anime_movie.html")).unwrap();
+
+        assert_eq!(ajax_url, "https://monoschinos.st/ajax/ajax_pagination/77");
+        assert_eq!(
+            ver_base,
+            "https://monoschinos.st/ver/baruto-the-movie-episodio-"
+        );
+    }
+
+    #[test]
+    fn episodios_lista_completa_en_orden() {
+        let nums = parse_episode_nums(&crate::provider::fixture("episodios_278.json")).unwrap();
+
+        assert_eq!(nums.len(), 220);
+        assert_eq!(nums.first(), Some(&1));
+        assert_eq!(nums.last(), Some(&220));
+    }
+
+    #[test]
+    fn servidores_decodifica_base64_con_nombre() {
+        let servers = parse_servers(&crate::provider::fixture("ver_naruto_ep1.html")).unwrap();
+
+        assert_eq!(servers.len(), 8);
+        let doodstream = servers
+            .iter()
+            .find(|server| server.name == "doodstream")
+            .unwrap();
+        assert_eq!(doodstream.url, "https://doodstream.com/e/7rzty4dot1pe");
+        assert!(servers.iter().all(|server| server.url.starts_with("http")));
+    }
+
+    #[test]
+    fn ver_base_rechaza_link_sin_numero() {
+        assert!(ver_base_of("https://monoschinos.st/ver/naruto-episodio-a").is_err());
+    }
+
+    // Prueba de humo contra el sitio real; corre con: cargo test -- --ignored
+    #[test]
+    #[ignore]
+    fn live_smoke_sitio_real() {
+        let base = "https://monoschinos.st";
+
+        let animes = search(base, "naruto").unwrap();
+        assert!(!animes.is_empty());
+
+        let naruto = animes
+            .iter()
+            .find(|anime| anime.title == "Naruto")
+            .expect("Naruto debe aparecer en los resultados");
+
+        let episodios = episodes(&naruto.url).unwrap();
+        assert_eq!(episodios.len(), 220);
+        assert_eq!(episodios[0], "https://monoschinos.st/ver/naruto-episodio-1");
+
+        let servers = servers(&episodios[0]).unwrap();
+        assert!(!servers.is_empty());
+    }
+}

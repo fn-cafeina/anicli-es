@@ -161,3 +161,73 @@ fn is_wsl() -> bool {
             .map(|version| version.to_lowercase().contains("microsoft"))
             .unwrap_or(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::Server;
+
+    fn server(name: &str) -> Server {
+        Server {
+            name: name.to_string(),
+            url: "https://example.com/e/1".to_string(),
+        }
+    }
+
+    #[test]
+    fn referer_extrae_origen_del_embed() {
+        assert_eq!(
+            referer_of("https://www.mp4upload.com/embed-abc.html"),
+            "https://www.mp4upload.com"
+        );
+        assert_eq!(referer_of("http://ok.ru/videoembed/123"), "http://ok.ru");
+        assert_eq!(referer_of("https://host"), "https://host");
+    }
+
+    #[test]
+    fn referer_vacio_sin_esquema() {
+        assert_eq!(referer_of("no-es-una-url"), "");
+    }
+
+    #[test]
+    fn filtro_deja_solo_servidores_soportados() {
+        let servers = vec![server("voe"), server("mp4upload"), server("mixdrop")];
+
+        let filtered = supported_servers(servers);
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "mp4upload");
+    }
+
+    #[test]
+    fn filtro_vacio_si_no_hay_soportados() {
+        let servers = vec![server("voe")];
+
+        assert!(supported_servers(servers).is_empty());
+    }
+
+    #[test]
+    fn extraccion_igual_al_embed_no_es_stream() {
+        let embed = "https://www.mp4upload.com/embed-abc.html";
+
+        assert!(!is_stream_url(embed, embed));
+        assert!(!is_stream_url(
+            "https://www.mp4upload.com/embed-abc.html/",
+            embed
+        ));
+        assert!(!is_stream_url(
+            "HTTPS://WWW.MP4UPLOAD.COM/EMBED-ABC.HTML",
+            embed
+        ));
+        assert!(!is_stream_url("", embed));
+        assert!(!is_stream_url("   ", embed));
+    }
+
+    #[test]
+    fn url_distinta_al_embed_es_stream() {
+        assert!(is_stream_url(
+            "https://a4.mp4upload.com:183/d/xyz/video.mp4",
+            "https://www.mp4upload.com/embed-abc.html"
+        ));
+    }
+}
