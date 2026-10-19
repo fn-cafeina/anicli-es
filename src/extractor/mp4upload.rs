@@ -9,8 +9,8 @@ use anyhow::{bail, Context, Result};
 const SRC_MARKERS: &[&str] = &["src:", "file:"];
 
 pub fn extract(embed_url: &str) -> Result<Extracted> {
-    let html = http::get(embed_url)
-        .with_context(|| format!("descargando el embed de {embed_url}"))?;
+    let html =
+        http::get(embed_url).with_context(|| format!("descargando el embed de {embed_url}"))?;
     let url = find_stream_url(&html, embed_url)
         .with_context(|| format!("sin stream en {embed_url} (link caído o markup nuevo)"))?;
     Ok(Extracted {
@@ -78,11 +78,7 @@ mod tests {
 
         assert!(find_stream_url("File was deleted", embed).is_err());
         assert!(find_stream_url("", embed).is_err());
-        assert!(find_stream_url(
-            &format!(r#"src: "{embed}""#),
-            embed
-        )
-        .is_err());
+        assert!(find_stream_url(&format!(r#"src: "{embed}""#), embed).is_err());
     }
 
     #[test]
